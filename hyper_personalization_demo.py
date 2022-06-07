@@ -29,7 +29,7 @@ def dates_udf(description):
 
 tr_df = spark.sql("select * from "+table_name)
 tr_df_cleaned = (
-    df
+    tr_df
         .withColumn("tr_description_clean", dates_udf(F.col("tr_description")))
         .withColumn("tr_description_clean", F.regexp_replace(F.col("tr_description_clean"), price_regex, ""))
         .withColumn("tr_description_clean", F.regexp_replace(F.col("tr_description_clean"), "(\(+)|(\)+)", ""))
@@ -60,7 +60,7 @@ tr_df_fasttext = tr_df_cleaned.withColumn(
     )
 )
 
-tr_df_fasttext.write.mode("overwrite").format("delta").save(getParam("transactions_fasttext"))
+# tr_df_fasttext.write.mode("overwrite").format("delta").save(getParam("transactions_fasttext"))
 
 # COMMAND ----------
 
@@ -77,7 +77,7 @@ tr_df_fasttext.write.mode("overwrite").format("delta").save(getParam("transactio
 # COMMAND ----------
 
 # DBTITLE 1,Sampling
-from utils.personalization_utils import  format_dict
+from utils.personalization_utils import  format_dict, sample_data
 
 tr_df_sampled = sample_data(5000, 100, tr_df)
 display(tr_df_sampled.groupBy("tr_merchant").count().orderBy("count"))

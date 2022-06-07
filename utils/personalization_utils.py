@@ -1,3 +1,5 @@
+from pyspark.sql import functions as F
+
 def format_dict(label_column, value_column, in_dict):
     labels = in_dict[label_column]
     rates = in_dict[value_column]
