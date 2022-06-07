@@ -19,6 +19,7 @@ from training_file import TrainingFile
 
 # COMMAND ----------
 
+# DBTITLE 1,Clean the dataset
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
@@ -42,4 +43,62 @@ display(tr_df_cleaned.select("tr_merchant", "tr_description", "tr_description_cl
 
 # COMMAND ----------
 
+from fasttext_mlflow import FastTextMLFlowModel
 
+# COMMAND ----------
+
+# DBTITLE 1,Prep the data in the right format for FastText
+tr_df_fasttext = tr_df_cleaned.withColumn(
+    "fasttext",
+    F.concat(
+        F.concat(
+            F.lit("__label__"),
+            F.regexp_replace(F.col("tr_merchant"), "\\s+", "-")
+        ),
+        F.lit(" "),
+        F.col("tr_description_clean")
+    )
+)
+
+tr_df_fasttext.write.mode("overwrite").format("delta").save(getParam("transactions_fasttext"))
+
+# COMMAND ----------
+
+
+
+# spark.sql("CREATE TABLE IF NOT EXISTS " + table_name + " USING DELTA LOCATION '" + transaction_path + "'")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Imbalanced dataset
+# MAGIC When it comes to card transactions data, it is very common to come across a large disparity in available data for different merchants. For example it is to be expected that "Amazon" will drive much more transactions than "MyLittleCornerShop". Let's inspect the distribution of our raw data.
+
+# COMMAND ----------
+
+# DBTITLE 1,Sampling
+from utils.personalization_utils import  format_dict
+
+tr_df_sampled = sample_data(5000, 100, tr_df)
+display(tr_df_sampled.groupBy("tr_merchant").count().orderBy("count"))
+
+# COMMAND ----------
+
+# DBTITLE 1,Split to training and validation
+import pyspark.sql.functions as F
+from pyspark.sql.window import Window
+
+w =  Window.partitionBy("tr_merchant").orderBy(F.rand())
+df = tr_df_sampled.withColumn("class_percentile", F.bround(F.percent_rank().over(w), 4))
+
+df.where("class_percentile < 0.9") \
+  .write \
+  .mode("overwrite") \
+  .format("delta") \
+  .save(getParam('transactions_train_raw'))
+
+df.where("class_percentile >= 0.9") \
+  .write \
+  .mode("overwrite") \
+  .format("delta") \
+  .save(getParam('transactions_valid_raw'))
